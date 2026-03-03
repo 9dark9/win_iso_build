@@ -8,9 +8,9 @@ on:
 permissions: write-all
 
 env:
-  ISO_RELEASE_TAG: Windows_11_LTSC_2024_X64_ZH-CN
-  ISO_LABEL: ge_refresh_enterprise_ltsc_2024_x64frev
-  EXPECTED_ISO_HASH: 2cb21649590c8cf770cd93556596dff4fd800f24d267a9be9d9ce0ee9e03f5ac
+  ISO_RELEASE_TAG: LTSC2024
+  ISO_LABEL: LTSC2024.26200
+  EXPECTED_ISO_HASH: 4A3F22CC44D005183537F5F0BE0B086A2334E6466C4C1442CA627121973D3F0D
   SPLIT_SIZE: 2000m
   SEVENZIP: "C:\\Program Files\\7-Zip\\7z.exe"
 
@@ -145,9 +145,9 @@ jobs:
             }
           }
 
-          $api = "https://api.github.com/repos/adavak/win_iso_zip/releases/tags/${{ env.ISO_RELEASE_TAG }}"
+          $api = "https://api.github.com/repos/9dark9/UpdateWinISO/releases/tags/${{ env.ISO_RELEASE_TAG }}"
           $json = Invoke-RestMethodWithRetry $api
-          $parts = $json.assets | Where-Object { $_.name -match '\.zip\.\d+$' } | Sort-Object name
+          $parts = $json.assets | Where-Object { $_.name -match '\.7z\.\d+$' } | Sort-Object name
           if ($parts.Count -eq 0) { throw "No zip parts found" }
           foreach ($p in $parts) {
             Invoke-WebRequest $p.browser_download_url -OutFile "download\$($p.name)"
@@ -160,7 +160,7 @@ jobs:
         run: |
           $sevenZip = "${{ env.SEVENZIP }}"
           if (-not (Test-Path $sevenZip)) { throw "7z.exe not found at $sevenZip" }
-          & $sevenZip x "download\*.zip.001" -o"patcher" -y
+          & $sevenZip x "download\*.7z.001" -o"patcher" -y
 
       # 8. Verify original ISO SHA256
       - name: Verify ISO SHA256
@@ -175,6 +175,13 @@ jobs:
           $hashMatches = $hashOutput | Select-String -Pattern '([a-fA-F0-9]{64})' | ForEach-Object { $_.Matches[0].Value }
           $actual = ($hashMatches | Select-Object -First 1).Trim().ToLower()
           if ($actual -ne "${{ env.EXPECTED_ISO_HASH }}") { throw "SHA256 mismatch: $actual" }
+          
+      # 8.5 可选替换预设文件W10UI.ini
+      - name: Copy W10UI.ini to patcher directory
+        if: steps.check.outputs.run == 'true'
+        shell: cmd
+        run: |
+          copy "D:\a\win_iso_build\win_iso_build\myini\W10UI.ini" "D:\a\win_iso_build\win_iso_build\patcher"
 
       # 9. Run Start.cmd (auto exit via choice 9)
       - name: Run Start.cmd
@@ -215,7 +222,7 @@ jobs:
           Rename-Item -Path $iso.FullName -NewName $newName
 
           # Split using 7z
-          & $sevenZip a "release\$newName.zip" "patcher\$newName" -v${{ env.SPLIT_SIZE }}
+          & $sevenZip a "release\$newName.7z" "patcher\$newName" -v${{ env.SPLIT_SIZE }}
 
           $runTimeTag = (Get-Date).ToString("yyyyMMdd-HHmm")
           $tag = "$env:ISO_RELEASE_TAG-$version.$build-$runTimeTag"
@@ -251,6 +258,6 @@ jobs:
             <!-- STATE
             SCRIPT_COMMIT=${{ steps.script.outputs.sha }}
             -->
-          files: release/*.zip.*
+          files: release/*.7z.*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
