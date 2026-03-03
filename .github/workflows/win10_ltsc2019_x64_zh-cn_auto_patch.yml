@@ -175,6 +175,13 @@ jobs:
           $hashMatches = $hashOutput | Select-String -Pattern '([a-fA-F0-9]{64})' | ForEach-Object { $_.Matches[0].Value }
           $actual = ($hashMatches | Select-Object -First 1).Trim().ToLower()
           if ($actual -ne "${{ env.EXPECTED_ISO_HASH }}") { throw "SHA256 mismatch: $actual" }
+          
+        # 8.5 可选替换预设文件W10UI.ini
+      - name: Copy W10UI.ini to patcher directory
+        if: steps.check.outputs.run == 'true'
+        shell: cmd
+        run: |
+          copy "D:\a\win_iso_build\win_iso_build\myini\W10UI.ini" "D:\a\win_iso_build\win_iso_build\patcher"
 
       # 9. Run Start.cmd (auto exit via choice 9)
       - name: Run Start.cmd
