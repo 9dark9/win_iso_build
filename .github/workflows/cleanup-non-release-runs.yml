@@ -16,7 +16,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4  # 更新到最新稳定版
+        uses: actions/checkout@v4
 
       - name: Install dependencies
         run: |
@@ -25,49 +25,82 @@ jobs:
       - name: Fetch recent workflow runs
         run: |
           echo 'Fetching workflow runs (last $PER_PAGE runs)...'
-          # 调用API并检查返回状态，避免空文件
-          RESPONSE=$(curl -s -w "%{http_code}" -H "Authorization: token $GH_TOKEN" \
-            "https://api.github.com/repos/$REPOSITORY/actions/runs?per_page=$PER_PAGE")
           
-          # 分离HTTP状态码和响应体
-          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
-          RESPONSE_BODY=$(echo "$RESPONSE" | head -n -1)
+          # 1. 先清空旧文件，避免残留内容干扰
+          rm -f runs.json
           
-          # 校验API请求是否成功
+          # 2. 调用API，严格处理响应（用临时文件分离响应体和状态码）
+          TMP_RESP=$(mktemp)
+          curl -s -o "$TMP_RESP" -w "%{http_code}" \
+            -H "Authorization: token $GH_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/$REPOSITORY/actions/runs?per_page=$PER_PAGE" > http_status.txt
+          
+          # 3. 读取HTTP状态码
+          HTTP_CODE=$(cat http_status.txt)
+          echo "API Response Code: $HTTP_CODE"
+          
+          # 4. 校验HTTP状态码
           if [ "$HTTP_CODE" -ne 200 ]; then
             echo "Error: Failed to fetch workflow runs (HTTP $HTTP_CODE)"
-            echo "Response: $RESPONSE_BODY"
+            echo "API Response Content:"
+            cat "$TMP_RESP"
+            rm -f "$TMP_RESP" http_status.txt
             exit 1
           fi
           
-          # 保存响应体到文件
-          echo "$RESPONSE_BODY" > runs.json
-          echo "Fetched and saved $(jq '.workflow_runs | length' runs.json) workflow runs"
+          # 5. 校验JSON格式是否有效
+          if ! jq empty "$TMP_RESP" >/dev/null 2>&1; then
+            echo "Error: Invalid JSON received from API"
+            echo "Raw Response:"
+            cat "$TMP_RESP"
+            rm -f "$TMP_RESP" http_status.txt
+            exit 1
+          fi
+          
+          # 6. 移动有效JSON到目标文件
+          mv "$TMP_RESP" runs.json
+          rm -f http_status.txt
+          
+          # 7. 统计获取的运行记录数
+          RUN_COUNT=$(jq '.workflow_runs | length' runs.json)
+          echo "Successfully fetched $RUN_COUNT workflow runs"
 
       - name: Delete short workflow runs (<10 minutes)
         run: |
           echo 'Deleting workflow runs with duration < 10 minutes...'
           
-          # 关键修复：用.[]?处理null，过滤有效记录，避免遍历空值报错
-          # 只提取有start/end时间的记录，避免时间转换失败
+          # 关键修复：先检查JSON文件是否存在且非空
+          if [ ! -f runs.json ] || [ ! -s runs.json ]; then
+            echo "ℹ️ No workflow runs file or file is empty"
+            exit 0
+          fi
+          
+          # 再次校验JSON格式（双重保险）
+          if ! jq empty runs.json >/dev/null 2>&1; then
+            echo "Error: runs.json contains invalid JSON"
+            cat runs.json
+            exit 1
+          fi
+          
+          # 提取有效记录（处理null+过滤有效时间）
           jq -r '
             .workflow_runs[]? 
-            | select(.run_started_at != null and .updated_at != null)
+            | select(.run_started_at != null and .updated_at != null and .id != null)
             | "\(.id) \(.run_started_at) \(.updated_at)"
           ' runs.json > runs_times.txt
           
-          # 检查文件是否为空，避免空循环
+          # 检查提取结果是否为空
           if [ ! -s runs_times.txt ]; then
-            echo "ℹ️ No workflow runs to process (file is empty)"
+            echo "ℹ️ No workflow runs to process (no valid runs found)"
             exit 0
           fi
           
           # 遍历处理每条记录
           while IFS=" " read -r run_id start_time end_time; do
-              # 跳过空行（避免文件末尾空行导致的异常）
-              [ -z "$run_id" ] && continue
+              [ -z "$run_id" ] && continue  # 跳过空行
               
-              # 安全转换时间戳（加容错，转换失败则跳过）
+              # 安全转换时间戳
               start_ts=$(date -d "$start_time" +%s 2>/dev/null)
               end_ts=$(date -d "$end_time" +%s 2>/dev/null)
               
@@ -80,17 +113,21 @@ jobs:
               
               if [ $duration -lt $THRESHOLD_SECONDS ]; then
                   echo "⚠️ Deleting run $run_id (duration: $duration sec < $THRESHOLD_SECONDS sec)"
-                  # 删除并检查结果
-                  DELETE_RESP=$(curl -s -w "%{http_code}" -X DELETE \
+                  # 执行删除并检查结果
+                  DELETE_TMP=$(mktemp)
+                  DELETE_CODE=$(curl -s -o "$DELETE_TMP" -w "%{http_code}" \
+                    -X DELETE \
                     -H "Authorization: token $GH_TOKEN" \
+                    -H "Accept: application/vnd.github.v3+json" \
                     "https://api.github.com/repos/$REPOSITORY/actions/runs/$run_id")
-                  DELETE_CODE=$(echo "$DELETE_RESP" | tail -n1)
+                  
                   if [ "$DELETE_CODE" -eq 204 ]; then
                     echo "✅ Successfully deleted run $run_id"
                   else
                     echo "❌ Failed to delete run $run_id (HTTP $DELETE_CODE)"
-                    echo "Response: $(echo "$DELETE_RESP" | head -n -1)"
+                    echo "Delete Response: $(cat "$DELETE_TMP")"
                   fi
+                  rm -f "$DELETE_TMP"
               else
                   echo "✅ Keeping run $run_id (duration: $duration sec ≥ $THRESHOLD_SECONDS sec)"
               fi
