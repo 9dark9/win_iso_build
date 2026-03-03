@@ -3,52 +3,95 @@ name: Cleanup Short Workflow Runs
 on:
   workflow_dispatch:
   schedule:
-    - cron: '30 */3 * * *'  # Run every 3.5 hours
+    - cron: '30 */3 * * *'  # Run every 3 hours and 30 minutes
 
 jobs:
   cleanup:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      REPOSITORY: ${{ github.repository }}
+      THRESHOLD_SECONDS: 600  # 10 minutes
+      PER_PAGE: 50  # Max 100 per GitHub API limit
+
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4  # 更新到最新稳定版
 
       - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y jq curl
+          sudo apt-get update && sudo apt-get install -y jq curl
 
       - name: Fetch recent workflow runs
         run: |
-          echo 'Fetching workflow runs...'
-          curl -s -H "Authorization: token $GH_TOKEN" \
-            https://api.github.com/repos/${{ github.repository }}/actions/runs?per_page=50 \
-            > runs.json
-          echo "Saved workflow runs to runs.json"
+          echo 'Fetching workflow runs (last $PER_PAGE runs)...'
+          # 调用API并检查返回状态，避免空文件
+          RESPONSE=$(curl -s -w "%{http_code}" -H "Authorization: token $GH_TOKEN" \
+            "https://api.github.com/repos/$REPOSITORY/actions/runs?per_page=$PER_PAGE")
+          
+          # 分离HTTP状态码和响应体
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          RESPONSE_BODY=$(echo "$RESPONSE" | head -n -1)
+          
+          # 校验API请求是否成功
+          if [ "$HTTP_CODE" -ne 200 ]; then
+            echo "Error: Failed to fetch workflow runs (HTTP $HTTP_CODE)"
+            echo "Response: $RESPONSE_BODY"
+            exit 1
+          fi
+          
+          # 保存响应体到文件
+          echo "$RESPONSE_BODY" > runs.json
+          echo "Fetched and saved $(jq '.workflow_runs | length' runs.json) workflow runs"
 
       - name: Delete short workflow runs (<10 minutes)
         run: |
           echo 'Deleting workflow runs with duration < 10 minutes...'
           
-          # Extract run ID, start time, end time
-          jq -r '.workflow_runs[] | "\(.id) \(.run_started_at) \(.updated_at)"' runs.json > runs_times.txt
+          # 关键修复：用.[]?处理null，过滤有效记录，避免遍历空值报错
+          # 只提取有start/end时间的记录，避免时间转换失败
+          jq -r '
+            .workflow_runs[]? 
+            | select(.run_started_at != null and .updated_at != null)
+            | "\(.id) \(.run_started_at) \(.updated_at)"
+          ' runs.json > runs_times.txt
           
-          threshold=600  # 10 minutes in seconds
+          # 检查文件是否为空，避免空循环
+          if [ ! -s runs_times.txt ]; then
+            echo "ℹ️ No workflow runs to process (file is empty)"
+            exit 0
+          fi
           
-          while read run_id start_time end_time; do
-              # Convert to Unix timestamps
-              start_ts=$(date -d "$start_time" +%s)
-              end_ts=$(date -d "$end_time" +%s)
+          # 遍历处理每条记录
+          while IFS=" " read -r run_id start_time end_time; do
+              # 跳过空行（避免文件末尾空行导致的异常）
+              [ -z "$run_id" ] && continue
+              
+              # 安全转换时间戳（加容错，转换失败则跳过）
+              start_ts=$(date -d "$start_time" +%s 2>/dev/null)
+              end_ts=$(date -d "$end_time" +%s 2>/dev/null)
+              
+              if [ -z "$start_ts" ] || [ -z "$end_ts" ]; then
+                echo "⚠️ Skipping run $run_id: invalid time format (start: $start_time, end: $end_time)"
+                continue
+              fi
+              
               duration=$((end_ts - start_ts))
               
-              if [ $duration -lt $threshold ]; then
-                  # ⚠️ Warning for short run
-                  echo $'\u26A0\ufe0f Workflow run '"$run_id"' duration '"$duration"' seconds < '"$threshold"', deleting...'
-                  curl -s -X DELETE -H "Authorization: token $GH_TOKEN" \
-                    "https://api.github.com/repos/${{ github.repository }}/actions/runs/$run_id"
+              if [ $duration -lt $THRESHOLD_SECONDS ]; then
+                  echo "⚠️ Deleting run $run_id (duration: $duration sec < $THRESHOLD_SECONDS sec)"
+                  # 删除并检查结果
+                  DELETE_RESP=$(curl -s -w "%{http_code}" -X DELETE \
+                    -H "Authorization: token $GH_TOKEN" \
+                    "https://api.github.com/repos/$REPOSITORY/actions/runs/$run_id")
+                  DELETE_CODE=$(echo "$DELETE_RESP" | tail -n1)
+                  if [ "$DELETE_CODE" -eq 204 ]; then
+                    echo "✅ Successfully deleted run $run_id"
+                  else
+                    echo "❌ Failed to delete run $run_id (HTTP $DELETE_CODE)"
+                    echo "Response: $(echo "$DELETE_RESP" | head -n -1)"
+                  fi
               else
-                  # ✅ Keep run
-                  echo $'\u2705 Workflow run '"$run_id"' duration '"$duration"' seconds, keep'
+                  echo "✅ Keeping run $run_id (duration: $duration sec ≥ $THRESHOLD_SECONDS sec)"
               fi
           done < runs_times.txt
