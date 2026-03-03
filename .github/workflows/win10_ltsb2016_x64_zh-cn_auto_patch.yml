@@ -20,7 +20,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
+        with:
+          fetch-depth: 0
+          
       # 0. Start marker
       - name: Start workflow
         shell: pwsh
