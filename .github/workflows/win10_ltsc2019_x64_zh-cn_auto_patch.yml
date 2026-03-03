@@ -176,7 +176,7 @@ jobs:
           $actual = ($hashMatches | Select-Object -First 1).Trim().ToLower()
           if ($actual -ne "${{ env.EXPECTED_ISO_HASH }}") { throw "SHA256 mismatch: $actual" }
           
-        # 8.5 可选替换预设文件W10UI.ini
+      # 8.5 可选替换预设文件W10UI.ini
       - name: Copy W10UI.ini to patcher directory
         if: steps.check.outputs.run == 'true'
         shell: cmd
