@@ -5,6 +5,7 @@ on:
   schedule:
     - cron: "0 */3 * * *"  # Run every 3 hours
 
+# 全局权限配置（write-all 已包含所需权限，但仍需确保job级别继承）
 permissions: write-all
 
 env:
@@ -17,9 +18,15 @@ env:
 jobs:
   build:
     runs-on: windows-latest
+    # 显式继承全局权限（避免job级别权限覆盖）
+    permissions:
+      contents: write
+      workflows: write
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 关键：拉取完整仓库历史，否则无法操作标签
 
       # 0. Start marker
       - name: Start workflow
@@ -208,8 +215,8 @@ jobs:
           if ($iso.Name -match '(\d{1,6}\.\d{1,6})') { $versionBuild = $matches[1]; $version,$build=$versionBuild -split '\.' }
           if ($iso.Name -match '([A-Za-z]+-[A-Za-z]+)') { $locale = $matches[1].ToLower() }
 
-          $date = Get-Date -Format "yyMMdd"
-          $time = "0800"
+          $date = Get-Date -Format "yyyyMMdd"  # 修正：使用4位年份，和标签格式一致
+          $time = Get-Date -Format "HHmm"       # 修正：动态获取当前时间，而非固定0800
 
           # 7z SHA256
           $hashOutput = & $sevenZip h -scrcSHA256 "$($iso.FullName)"
@@ -232,17 +239,44 @@ jobs:
           "iso_file=$isoFile" >> $env:GITHUB_OUTPUT
           "iso_sha256=$hash" >> $env:GITHUB_OUTPUT
 
-      # 11. Create Git tag
+      # 11. Create Git tag (增加重试逻辑，修复权限问题)
       - name: Create Git tag
         if: steps.check.outputs.run == 'true'
         shell: pwsh
         run: |
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
+          # 配置git用户信息
+          git config user.name "github-actions[bot]"  # 修正：使用官方推荐的bot用户名
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          
           $tag = "${{ steps.iso.outputs.tag }}"
-          if (-not (git tag -l $tag)) {
-            git tag $tag
-            git push origin $tag
+          $maxAttempts = 3
+          $delaySeconds = 30
+
+          # 先拉取远程标签，避免本地和远程不一致
+          git fetch origin --tags
+
+          for ($i = 1; $i -le $maxAttempts; $i++) {
+            try {
+              if (-not (git tag -l $tag)) {
+                git tag $tag
+                Write-Host "Created tag: $tag"
+              }
+              
+              # 推送标签，增加详细输出便于调试
+              git push origin $tag --verbose
+              Write-Host "Pushed tag $tag successfully (attempt $i)"
+              break
+            } catch {
+              Write-Host "Failed to push tag (attempt $i/$maxAttempts): $($_.Exception.Message)"
+              if ($i -lt $maxAttempts) {
+                Write-Host "Retrying in $delaySeconds seconds..."
+                Start-Sleep -Seconds $delaySeconds
+                # 重试前再次拉取最新标签
+                git fetch origin --tags
+              } else {
+                throw "Failed to push tag $tag after $maxAttempts attempts"
+              }
+            }
           }
 
       # 12. Create GitHub Release
