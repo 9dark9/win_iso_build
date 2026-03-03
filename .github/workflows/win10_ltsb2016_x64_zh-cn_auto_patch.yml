@@ -8,9 +8,9 @@ on:
 permissions: write-all
 
 env:
-  ISO_RELEASE_TAG: Windows_10_LTSB_2016_X64_ZH-CN
-  ISO_LABEL: rs1_refresh_enterprise_ltsb_2016_x64frev
-  EXPECTED_ISO_HASH: a4f454748d50d2461957d6d3b0ac80af6e2248614147d9fadc69f2eae83b376f
+  ISO_RELEASE_TAG: LTSB2016
+  ISO_LABEL: LTSB2016.14393
+  EXPECTED_ISO_HASH: AA52F4897EDC260A2127443419D67261119275DA830D19A6C2452DBB5E225757
   SPLIT_SIZE: 2000m
   SEVENZIP: "C:\\Program Files\\7-Zip\\7z.exe"
 
@@ -145,9 +145,9 @@ jobs:
             }
           }
 
-          $api = "https://api.github.com/repos/adavak/win_iso_zip/releases/tags/${{ env.ISO_RELEASE_TAG }}"
+          $api = "https://api.github.com/repos/9dark9/UpdateWinISO/releases/tags/${{ env.ISO_RELEASE_TAG }}"
           $json = Invoke-RestMethodWithRetry $api
-          $parts = $json.assets | Where-Object { $_.name -match '\.zip\.\d+$' } | Sort-Object name
+          $parts = $json.assets | Where-Object { $_.name -match '\.7z\.\d+$' } | Sort-Object name
           if ($parts.Count -eq 0) { throw "No zip parts found" }
           foreach ($p in $parts) {
             Invoke-WebRequest $p.browser_download_url -OutFile "download\$($p.name)"
@@ -160,7 +160,7 @@ jobs:
         run: |
           $sevenZip = "${{ env.SEVENZIP }}"
           if (-not (Test-Path $sevenZip)) { throw "7z.exe not found at $sevenZip" }
-          & $sevenZip x "download\*.zip.001" -o"patcher" -y
+          & $sevenZip x "download\*.7z.001" -o"patcher" -y
 
       # 8. Verify original ISO SHA256
       - name: Verify ISO SHA256
@@ -215,7 +215,7 @@ jobs:
           Rename-Item -Path $iso.FullName -NewName $newName
 
           # Split using 7z
-          & $sevenZip a "release\$newName.zip" "patcher\$newName" -v${{ env.SPLIT_SIZE }}
+          & $sevenZip a "release\$newName.7z" "patcher\$newName" -v${{ env.SPLIT_SIZE }}
 
           $runTimeTag = (Get-Date).ToString("yyyyMMdd-HHmm")
           $tag = "$env:ISO_RELEASE_TAG-$version.$build-$runTimeTag"
@@ -251,6 +251,6 @@ jobs:
             <!-- STATE
             SCRIPT_COMMIT=${{ steps.script.outputs.sha }}
             -->
-          files: release/*.zip.*
+          files: release/*.7z.*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
