@@ -37,7 +37,7 @@ jobs:
 
       - name: Delete short and completed workflow runs (<10 minutes)
         run: |
-          echo 'Deleting completed workflow runs with duration < 10000 minutes...'
+          echo 'Deleting completed workflow runs with duration < 100000 minutes...'
           
           if ! jq -e '.workflow_runs' runs.json > /dev/null 2>&1; then
               echo $'\u26A0\ufe0f No workflow runs found (field is null/missing), cleanup skipped'
