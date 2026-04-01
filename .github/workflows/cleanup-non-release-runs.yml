@@ -46,7 +46,7 @@ jobs:
           
           jq -r '.workflow_runs[]? | select(.status=="completed") | "\(.id) \(.run_started_at) \(.updated_at)"' runs.json > runs_times.txt
           
-          threshold=600000
+          threshold=600
           
           while read run_id start_time end_time; do
               if [ -z "$run_id" ]; then
