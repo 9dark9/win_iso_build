@@ -1,4 +1,4 @@
-name: wo-Cleanup Short Workflow Runs
+name: Cleanup Short Workflow Runs
 
 on:
   workflow_dispatch:
