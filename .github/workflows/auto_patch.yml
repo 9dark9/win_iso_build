@@ -54,11 +54,11 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Continue'
-          $branch = gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name'
-          $all = gh run list --workflow "${{ github.workflow }}" --branch $branch --json databaseId,conclusion,createdAt --limit 100 | ConvertFrom-Json
-          $all | Where-Object { $_.conclusion -in @('failure','cancelled','timed_out') } | ForEach-Object { try { gh run delete $_.databaseId --yes 2>$null } catch {} }
-          $all | Where-Object { ((Get-Date) - [DateTime]::Parse($_.createdAt)).TotalMinutes -lt 10 } | ForEach-Object { try { gh run delete $_.databaseId --yes 2>$null } catch {} }
-          $all | Select-Object -Skip 10 | ForEach-Object { try { gh run delete $_.databaseId --yes 2>$null } catch {} }
+          $all = gh run list --workflow "${{ github.workflow }}" --branch ${{ github.ref_name }} --json databaseId,conclusion,createdAt --limit 100 | ConvertFrom-Json
+          Write-Host "Total runs: $($all.Count)"
+          $all | Where-Object { $_.conclusion -in @('failure','cancelled','timed_out') } | ForEach-Object { Write-Host "Delete failed: $($_.databaseId)"; try { gh run delete $_.databaseId --yes 2>$null } catch {} }
+          $all | Where-Object { ((Get-Date) - [DateTime]::Parse($_.createdAt)).TotalMinutes -lt 10 } | ForEach-Object { Write-Host "Delete short: $($_.databaseId)"; try { gh run delete $_.databaseId --yes 2>$null } catch {} }
+          $all | Select-Object -Skip 10 | ForEach-Object { Write-Host "Delete old: $($_.databaseId)"; try { gh run delete $_.databaseId --yes 2>$null } catch {} }
           exit 0
 
       # 1. Start marker
