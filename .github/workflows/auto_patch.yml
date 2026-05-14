@@ -51,11 +51,12 @@ jobs:
         shell: pwsh
         run: Write-Host "Starting ${{ matrix.version.name }} Auto Patch workflow"
 
-      # 1. Get latest meta4 file SHA from Win_ISO_Patching_Scripts
+      # 2. Get latest meta4 file SHA from Win_ISO_Patching_Scripts
       - name: Get patch script meta4 file SHA
         id: script
         shell: pwsh
         run: |
+          $ProgressPreference = 'SilentlyContinue'
           function Invoke-RestMethodWithRetry([string]$uri, [int]$maxAttempts=5, [int]$delaySeconds=120) {
             for ($i = 1; $i -le $maxAttempts; $i++) {
               try {
@@ -75,7 +76,7 @@ jobs:
           $meta4 = Invoke-RestMethodWithRetry "https://api.github.com/repos/adavak/Win_ISO_Patching_Scripts/contents/Scripts/${{ matrix.version.meta4_file }}"
           "sha=$($meta4.sha)" >> $env:GITHUB_OUTPUT
 
-      # 2. Read last meta4 SHA from Release body
+      # 3. Read last meta4 SHA from Release body
       - name: Read last meta4 SHA
         id: last
         shell: pwsh
@@ -116,14 +117,14 @@ jobs:
         if: steps.check.outputs.run == 'false'
         run: echo "No meta4 update for ${{ matrix.version.name }}, skip build."
 
-      # 3. Prepare workspace
+      # 4. Prepare workspace
       - name: Prepare workspace
         if: steps.check.outputs.run == 'true'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path download, patcher, release
 
-      # 4. Clone patch scripts (with retry to avoid hangs)
+      # 5. Clone patch scripts (with retry to avoid hangs)
       - name: Clone patch scripts
         if: steps.check.outputs.run == 'true'
         shell: pwsh
@@ -147,11 +148,12 @@ jobs:
             }
           }
 
-      # 5. Download split ISO zip parts
+      # 6. Download split ISO zip parts
       - name: Download ISO zip parts
         if: steps.check.outputs.run == 'true'
         shell: pwsh
         run: |
+          $ProgressPreference = 'SilentlyContinue'
           function Invoke-RestMethodWithRetry([string]$uri, [int]$maxAttempts=5, [int]$delaySeconds=120) {
             for ($i = 1; $i -le $maxAttempts; $i++) {
               try {
@@ -176,7 +178,7 @@ jobs:
             Invoke-WebRequest $p.browser_download_url -OutFile "download\$($p.name)"
           }
 
-      # 6. Merge & extract using 7z
+      # 7. Merge & extract using 7z
       - name: Extract ISO using 7z
         if: steps.check.outputs.run == 'true'
         shell: pwsh
@@ -185,7 +187,7 @@ jobs:
           if (-not (Test-Path $sevenZip)) { throw "7z.exe not found at $sevenZip" }
           & $sevenZip x "download\*.zip.001" -o"patcher" -y
 
-      # 7. Verify original ISO SHA256
+      # 8. Verify original ISO SHA256
       - name: Verify ISO SHA256
         if: steps.check.outputs.run == 'true'
         shell: pwsh
@@ -199,7 +201,7 @@ jobs:
           $actual = ($hashMatches | Select-Object -First 1).Trim().ToLower()
           if ($actual -ne "${{ matrix.version.expected_hash }}") { throw "SHA256 mismatch: $actual" }
 
-      # 8. Run Start.cmd (auto exit via choice 9)
+      # 9. Run Start.cmd (auto exit via choice 9)
       - name: Run Start.cmd
         if: steps.check.outputs.run == 'true'
         shell: cmd
@@ -211,7 +213,7 @@ jobs:
             echo 9
           ) | Start.cmd
 
-      # 9. Rename ISO and split using 7z
+      # 10. Rename ISO and split using 7z
       - name: Rename ISO and split
         id: iso
         if: steps.check.outputs.run == 'true'
@@ -248,7 +250,7 @@ jobs:
           "iso_file=$isoFile" >> $env:GITHUB_OUTPUT
           "iso_sha256=$hash" >> $env:GITHUB_OUTPUT
 
-      # 10. Create Git tag
+      # 11. Create Git tag
       - name: Create Git tag
         if: steps.check.outputs.run == 'true'
         shell: pwsh
@@ -261,7 +263,7 @@ jobs:
             git push origin $tag
           }
 
-      # 11. Create GitHub Release
+      # 12. Create GitHub Release
       - name: Create Release
         if: steps.check.outputs.run == 'true'
         uses: softprops/action-gh-release@v2
