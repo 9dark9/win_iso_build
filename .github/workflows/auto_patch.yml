@@ -56,11 +56,10 @@ jobs:
           $ErrorActionPreference = 'Continue'
           $all = gh run list --workflow "${{ github.workflow }}" --branch ${{ github.ref_name }} --json databaseId,conclusion,createdAt --limit 100 | ConvertFrom-Json
           Write-Host "Total runs: $($all.Count)"
-          $header = @{ Authorization = "token $env:GH_TOKEN" }
           $api = "https://api.github.com/repos/${{ github.repository }}/actions/runs"
-          $all | Where-Object { $_.conclusion -in @('failure','cancelled','timed_out') } | ForEach-Object { Write-Host "Delete failed: $($_.databaseId)"; try { Invoke-RestMethod -Method Delete -Uri "$api/$($_.databaseId)" -Headers $header -ErrorAction SilentlyContinue } catch {} }
-          $all | Where-Object { ((Get-Date) - [DateTime]::Parse($_.createdAt)).TotalMinutes -lt 10 } | ForEach-Object { Write-Host "Delete short: $($_.databaseId)"; try { Invoke-RestMethod -Method Delete -Uri "$api/$($_.databaseId)" -Headers $header -ErrorAction SilentlyContinue } catch {} }
-          $all | Select-Object -Skip 10 | ForEach-Object { Write-Host "Delete old: $($_.databaseId)"; try { Invoke-RestMethod -Method Delete -Uri "$api/$($_.databaseId)" -Headers $header -ErrorAction SilentlyContinue } catch {} }
+          $all | Where-Object { $_.conclusion -in @('failure','cancelled','timed_out') } | ForEach-Object { Write-Host "Delete failed: $($_.databaseId)"; curl -s -X DELETE -H "Authorization: token $env:GH_TOKEN" "$api/$($_.databaseId)" | Out-Null }
+          $all | Where-Object { ((Get-Date) - [DateTime]::Parse($_.createdAt)).TotalMinutes -lt 10 } | ForEach-Object { Write-Host "Delete short: $($_.databaseId)"; curl -s -X DELETE -H "Authorization: token $env:GH_TOKEN" "$api/$($_.databaseId)" | Out-Null }
+          $all | Select-Object -Skip 10 | ForEach-Object { Write-Host "Delete old: $($_.databaseId)"; curl -s -X DELETE -H "Authorization: token $env:GH_TOKEN" "$api/$($_.databaseId)" | Out-Null }
           exit 0
 
       # 1. Start marker
