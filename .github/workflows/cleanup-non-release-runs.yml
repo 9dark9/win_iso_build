@@ -1,5 +1,5 @@
 name: Cleanup Short Workflow Runs
-# 手动触发 + 每3小时自动执行（30分执行）
+# 手动触发 + 每30天凌晨4时自动执行
 on:
   workflow_dispatch:  # 手动触发
   schedule:
