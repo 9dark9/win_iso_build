@@ -3,7 +3,7 @@ name: Cleanup Short Workflow Runs
 on:
   workflow_dispatch:  # 手动触发
   schedule:
-    - cron: '30 */3 * * *'
+    - cron: '* 4 */30 * *'
 
 jobs:
   cleanup:
