@@ -1,4 +1,4 @@
-name: Windows ISO Auto Patch (All Versions)
+name: Windows ISO Auto Patch
 
 on:
   workflow_dispatch:
