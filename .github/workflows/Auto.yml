@@ -299,7 +299,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.iso.outputs.tag }}
-          name: "$date-$time_${{ steps.iso.outputs.tag }}"
+          name: "${date}-${time}_${{ steps.iso.outputs.tag }}"
           body: |
             ISO SHA256: ${{ steps.iso.outputs.iso_sha256 }}
 
