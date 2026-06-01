@@ -299,7 +299,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.iso.outputs.tag }}
-          name: "${{ github.event.repository.updated_at }}.${{ steps.iso.outputs.tag }}"
+          name: "${{ steps.iso.outputs.tag }}.${{ github.event.repository.updated_at }}"
           body: |
             ISO SHA256: ${{ steps.iso.outputs.iso_sha256 }}
 
