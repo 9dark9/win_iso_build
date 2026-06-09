@@ -73,8 +73,8 @@ jobs:
         shell: pwsh
         run: Write-Host "Starting ${{ matrix.version.name }} Auto Patch workflow"
 
-      # 2. Get latest meta4 file SHA from Win_ISO_Patching_Scripts
-      - name: Get patch script meta4 file SHA
+      # 2. Get latest meta4 file hash (order-independent) from Win_ISO_Patching_Scripts
+      - name: Get patch script meta4 file hash
         id: script
         shell: pwsh
         run: |
@@ -95,10 +95,16 @@ jobs:
           }
 
           $meta4 = Invoke-RestMethodWithRetry "https://api.github.com/repos/adavak/Win_ISO_Patching_Scripts/contents/Scripts/${{ matrix.version.meta4_file }}"
-          "sha=$($meta4.sha)" >> $env:GITHUB_OUTPUT
+          $xmlText = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($meta4.content))
+          $names = [regex]::Matches($xmlText, 'file name="([^"]+)"') | ForEach-Object { $_.Groups[1].Value }
+          $sorted = $names | Sort-Object { [int]($_ -replace '^.*kb(\d+).*$', '$1') }
+          $combined = $sorted -join '|'
+          $hashBytes = [System.Security.Cryptography.SHA256]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($combined))
+          $hash = [System.BitConverter]::ToString($hashBytes).Replace('-', '').ToLower()
+          "hash=$hash" >> $env:GITHUB_OUTPUT
 
-      # 3. Read last meta4 SHA from Release body
-      - name: Read last meta4 SHA
+      # 3. Read last meta4 hash from Release body
+      - name: Read last meta4 hash
         id: last
         shell: pwsh
         run: |
@@ -115,20 +121,20 @@ jobs:
               Sort-Object published_at -Descending |
               Select-Object -First 1
 
-            if ($matched -and $matched.body -match 'META4_SHA=([a-f0-9]{40})') {
-              "sha=$($matches[1])" >> $env:GITHUB_OUTPUT
+            if ($matched -and $matched.body -match 'META4_HASH=([a-f0-9]{64})') {
+              "hash=$($matches[1])" >> $env:GITHUB_OUTPUT
             } else {
-              "sha=" >> $env:GITHUB_OUTPUT
+              "hash=" >> $env:GITHUB_OUTPUT
             }
           } catch {
-            "sha=" >> $env:GITHUB_OUTPUT
+            "hash=" >> $env:GITHUB_OUTPUT
           }
 
       - name: Check if workflow should run
         id: check
         shell: pwsh
         run: |
-          if ("${{ steps.script.outputs.sha }}" -eq "${{ steps.last.outputs.sha }}") {
+          if ("${{ steps.script.outputs.hash }}" -eq "${{ steps.last.outputs.hash }}") {
             "run=false" >> $env:GITHUB_OUTPUT
           } else {
             "run=true" >> $env:GITHUB_OUTPUT
@@ -302,7 +308,7 @@ jobs:
             ISO SHA256: ${{ steps.iso.outputs.iso_sha256 }}
 
             <!-- STATE
-            META4_SHA=${{ steps.script.outputs.sha }}
+            META4_HASH=${{ steps.script.outputs.hash }}
             -->
           files: release/*.7z.*
         env:
