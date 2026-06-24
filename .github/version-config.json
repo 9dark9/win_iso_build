@@ -2,19 +2,19 @@
     "versions":  {
                      "14393":  {
                                    "name":  "Win10 LTSB 2016",
-                                   "iso_label":  "rs1_refresh_enterprise_ltsb_2016_x64frev"
+                                   "iso_label":  "LTSB_2016"
                                },
                      "17763":  {
                                    "name":  "Win10 LTSC 2019",
-                                   "iso_label":  "rs5_refresh_enterprise_ltsc_2019_x64frev"
+                                   "iso_label":  "LTSC_2019"
                                },
                      "19041":  {
                                    "name":  "Win10 LTSC 2021",
-                                   "iso_label":  "vb_refresh_enterprise_ltsc_2021_x64frev"
+                                   "iso_label":  "LTSC_2021"
                                },
                      "26100":  {
                                    "name":  "Win11 LTSC 2024",
-                                   "iso_label":  "ge_refresh_enterprise_ltsc_2024_x64frev"
+                                   "iso_label":  "LTSC_2024"
                                }
                  },
     "locales":  [
@@ -23,20 +23,20 @@
     "releases":  {
                      "zh-CN":  {
                                    "26100":  {
-                                                 "release_tag":  "Windows_11_LTSC_2024_X64_ZH-CN",
-                                                 "expected_hash":  "2cb21649590c8cf770cd93556596dff4fd800f24d267a9be9d9ce0ee9e03f5ac"
+                                                 "release_tag":  "LTSC2024",
+                                                 "expected_hash":  "4a3f22cc44d005183537f5f0be0b086a2334e6466c4c1442ca627121973d3f0d"
                                              },
                                    "19041":  {
-                                                 "release_tag":  "Windows_10_LTSC_2021_X64_ZH-CN",
-                                                 "expected_hash":  "c117c5ddbc51f315c739f9321d4907fa50090ba7b48e7e9a2d173d49ef2f73a3"
+                                                 "release_tag":  "LTSC2021",
+                                                 "expected_hash":  "591033f7b1848740702764f6b454f42e34196e8aa8942dc2ffea3cbae8f9b101"
                                              },
                                    "17763":  {
-                                                 "release_tag":  "Windows_10_LTSC_2019_X64_ZH-CN",
-                                                 "expected_hash":  "aa4ea00581aa84999dbfe0627499b392e10c75912d6e2f1635eb7c4b9139fb5f"
+                                                 "release_tag":  "LTSC2019",
+                                                 "expected_hash":  "0c239a0d245cb2cd65aa2dc3f63ccae44fec608708a73668a0f76193deb0be82"
                                              },
                                    "14393":  {
-                                                 "release_tag":  "Windows_10_LTSB_2016_X64_ZH-CN",
-                                                 "expected_hash":  "a4f454748d50d2461957d6d3b0ac80af6e2248614147d9fadc69f2eae83b376f"
+                                                 "release_tag":  "LTSB2016",
+                                                 "expected_hash":  "aa52f4897edc260a2127443419d67261119275da830d19a6c2452dbb5e225757"
                                              }
                                }
                  }
