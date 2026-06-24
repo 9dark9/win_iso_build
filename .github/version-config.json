@@ -12,7 +12,7 @@
                                    "name":  "Win10 LTSC 2021",
                                    "iso_label":  "LTSC_2021"
                                },
-                     "26200":  {
+                     "26100":  {
                                    "name":  "Win11 LTSC 2024",
                                    "iso_label":  "LTSC_2024"
                                }
@@ -22,7 +22,7 @@
                 ],
     "releases":  {
                      "zh-CN":  {
-                                   "26200":  {
+                                   "26100":  {
                                                  "release_tag":  "LTSC2024",
                                                  "expected_hash":  "4a3f22cc44d005183537f5f0be0b086a2334e6466c4c1442ca627121973d3f0d"
                                              },
