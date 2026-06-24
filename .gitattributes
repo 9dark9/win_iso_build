@@ -1,0 +1,15 @@
+# Auto detect text files and perform LF normalization
+*          text=auto
+
+# Explicit file types used in this repo
+*.json     text
+*.yml      text
+*.md       text diff=markdown
+*.ps1      text eol=crlf
+*.bat      text eol=crlf
+*.cmd      text eol=crlf
+
+# Exclude files from exporting
+.gitattributes     export-ignore
+.gitignore         export-ignore
+.github/           export-ignore

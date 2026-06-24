@@ -1,0 +1,43 @@
+{
+    "versions":  {
+                     "14393":  {
+                                   "name":  "Win10 LTSB 2016",
+                                   "iso_label":  "rs1_refresh_enterprise_ltsb_2016_x64frev"
+                               },
+                     "17763":  {
+                                   "name":  "Win10 LTSC 2019",
+                                   "iso_label":  "rs5_refresh_enterprise_ltsc_2019_x64frev"
+                               },
+                     "19041":  {
+                                   "name":  "Win10 LTSC 2021",
+                                   "iso_label":  "vb_refresh_enterprise_ltsc_2021_x64frev"
+                               },
+                     "26100":  {
+                                   "name":  "Win11 LTSC 2024",
+                                   "iso_label":  "ge_refresh_enterprise_ltsc_2024_x64frev"
+                               }
+                 },
+    "locales":  [
+                    "zh-CN"
+                ],
+    "releases":  {
+                     "zh-CN":  {
+                                   "26100":  {
+                                                 "release_tag":  "Windows_11_LTSC_2024_X64_ZH-CN",
+                                                 "expected_hash":  "2cb21649590c8cf770cd93556596dff4fd800f24d267a9be9d9ce0ee9e03f5ac"
+                                             },
+                                   "19041":  {
+                                                 "release_tag":  "Windows_10_LTSC_2021_X64_ZH-CN",
+                                                 "expected_hash":  "c117c5ddbc51f315c739f9321d4907fa50090ba7b48e7e9a2d173d49ef2f73a3"
+                                             },
+                                   "17763":  {
+                                                 "release_tag":  "Windows_10_LTSC_2019_X64_ZH-CN",
+                                                 "expected_hash":  "aa4ea00581aa84999dbfe0627499b392e10c75912d6e2f1635eb7c4b9139fb5f"
+                                             },
+                                   "14393":  {
+                                                 "release_tag":  "Windows_10_LTSB_2016_X64_ZH-CN",
+                                                 "expected_hash":  "a4f454748d50d2461957d6d3b0ac80af6e2248614147d9fadc69f2eae83b376f"
+                                             }
+                               }
+                 }
+}
