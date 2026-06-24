@@ -13,42 +13,15 @@ env:
   SEVENZIP: "C:\\Program Files\\7-Zip\\7z.exe"
 
 jobs:
-  build:
-    strategy:
-      matrix:
-        version:
-          - name: "Win11 LTSC 2024"
-            release_tag: "LTSC2024"
-            iso_label: "LTSC_2024"
-            expected_hash: "4a3f22cc44d005183537f5f0be0b086a2334e6466c4c1442ca627121973d3f0d"
-            meta4_file: "script_26100_x64.meta4"
-
-          - name: "Win10 LTSC 2021"
-            release_tag: "LTSC2021"
-            iso_label: "LTSC_2021"
-            expected_hash: "591033f7b1848740702764f6b454f42e34196e8aa8942dc2ffea3cbae8f9b101"
-            meta4_file: "script_19041_x64.meta4"
-
-          - name: "Win10 LTSC 2019"
-            release_tag: "LTSC2019"
-            iso_label: "LTSC_2019"
-            expected_hash: "0c239a0d245cb2cd65aa2dc3f63ccae44fec608708a73668a0f76193deb0be82"
-            meta4_file: "script_17763_x64.meta4"
-
-          - name: "Win10 LTSB 2016"
-            release_tag: "LTSB2016"
-            iso_label: "LTSB_2016"
-            expected_hash: "aa52f4897edc260a2127443419d67261119275da830d19a6c2452dbb5e225757"
-            meta4_file: "script_14393_x64.meta4"
-
-    runs-on: windows-latest
-
+  generate-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.gen.outputs.matrix }}
     steps:
       - uses: actions/checkout@v4
 
-      # 0. Cleanup old runs before starting
+      # Cleanup old runs before starting (once per dispatch)
       - name: Cleanup old runs
-        if: always() && matrix.version.name == 'Win11 LTSC 2024'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: pwsh
@@ -58,15 +31,56 @@ jobs:
           Write-Host "Total runs: $($all.Count)"
           $api = "https://api.github.com/repos/${{ github.repository }}/actions/runs"
           $deleted = New-Object 'System.Collections.Generic.HashSet[long]'
-          # Delete failed/cancelled/timed_out — separate pass by age: old first to avoid hitting max deletions (assumed ~50/mo for this strategy)
+          # Delete failed/cancelled/timed_out — separate pass by age: old first
           $all | Where-Object { $_.conclusion -in @('failure','cancelled','timed_out') } | Sort-Object createdAt | ForEach-Object { Write-Host "Delete: $($_.databaseId)"; try { Invoke-RestMethod -Method Delete -Uri "$api/$($_.databaseId)" -Headers @{Authorization = "token $env:GH_TOKEN"} -ErrorAction Stop; [void]$deleted.Add($_.databaseId); Write-Host "  OK" } catch { Write-Host "  FAIL: $($_.Exception.Message)" } }
-          # Delete short-duration runs (< 3 min) — meta4 check with nothing to build
+          # Delete short-duration runs (< 3 min)
           $all | Where-Object { $_.updatedAt -and $_.startedAt -and ([DateTime]::Parse($_.updatedAt) - [DateTime]::Parse($_.startedAt)).TotalMinutes -lt 3 } | ForEach-Object { Write-Host "Delete short: $($_.databaseId)"; try { Invoke-RestMethod -Method Delete -Uri "$api/$($_.databaseId)" -Headers @{Authorization = "token $env:GH_TOKEN"} -ErrorAction Stop; [void]$deleted.Add($_.databaseId); Write-Host "  OK" } catch { Write-Host "  FAIL: $($_.Exception.Message)" } }
-          # Keep 10 newest from remaining (skip already-deleted)
+          # Keep 10 newest from remaining
           $good = $all | Where-Object { $_.conclusion -notin @('failure','cancelled','timed_out') -and -not $deleted.Contains($_.databaseId) }
           Write-Host "Good runs after cleanup (keep 10 of $($good.Count))"
           $good | Select-Object -Skip 10 | ForEach-Object { Write-Host "Delete old: $($_.databaseId)"; try { Invoke-RestMethod -Method Delete -Uri "$api/$($_.databaseId)" -Headers @{Authorization = "token $env:GH_TOKEN"} -ErrorAction Stop; Write-Host "  OK" } catch { Write-Host "  FAIL: $($_.Exception.Message)" } }
           exit 0
+
+      # Generate dynamic matrix from config
+      - id: gen
+        shell: pwsh
+        run: |
+          $cfg = Get-Content .github/version-config.json | ConvertFrom-Json -AsHashtable
+          $matrix = @()
+          foreach ($build in $cfg.versions.Keys) {
+            $ver = $cfg.versions[$build]
+            foreach ($locale in $cfg.locales) {
+              $rel = $cfg.releases[$locale][$build]
+              if (-not $rel) {
+                Write-Host "Skip $($ver.name) ($locale) — no release data"
+                continue
+              }
+              if (-not $rel.expected_hash) {
+                Write-Host "Skip $($ver.name) ($locale) — expected_hash missing, fill it in version-config.json"
+                continue
+              }
+              $matrix += [PSCustomObject]@{
+                name          = "$($ver.name) ($locale)"
+                release_tag   = $rel.release_tag
+                iso_label     = $ver.iso_label
+                expected_hash = $rel.expected_hash
+                meta4_file    = "script_${build}_x64.meta4"
+              }
+            }
+          }
+          $json = $matrix | ConvertTo-Json -Compress -Depth 3
+          Write-Host "Generated matrix: $json"
+          "matrix=$json" >> $env:GITHUB_OUTPUT
+
+  build:
+    needs: generate-matrix
+    strategy:
+      matrix:
+        version: ${{ fromJSON(needs.generate-matrix.outputs.matrix) }}
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
 
       # 1. Start marker
       - name: Start workflow
@@ -200,7 +214,7 @@ jobs:
           $api = "https://api.github.com/repos/9dark9/UpdateWinISO/releases/tags/${{ matrix.version.release_tag }}"
           $json = Invoke-RestMethodWithRetry $api
           $parts = $json.assets | Where-Object { $_.name -match '\.7z\.\d+$' } | Sort-Object name
-          if ($parts.Count -eq 0) { throw "No zip parts found" }
+          if ($parts.Count -eq 0) { throw "No zip parts found for ${{ matrix.version.release_tag }}" }
           foreach ($p in $parts) {
             Invoke-WebRequest $p.browser_download_url -OutFile "download\$($p.name)"
           }
