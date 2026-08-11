@@ -83,7 +83,7 @@ jobs:
               $rel = $cfg.releases[$loc][$build]
               if (-not $rel) { continue }
               if ($rel.expected_hash -notmatch '^[a-f0-9]{64}$') {
-                $errors += "$loc/$build: expected_hash is not a 64-char hex string"
+                $errors += "${loc}/${build}: expected_hash is not a 64-char hex string"
               }
             }
           }
