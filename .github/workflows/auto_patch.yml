@@ -7,14 +7,17 @@ permissions:
   contents: write
   actions: write
 
+concurrency:
+  group: auto_patch
+  cancel-in-progress: false
+
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   SPLIT_SIZE: 2000m
   SEVENZIP: "C:\\Program Files\\7-Zip\\7z.exe"
 
 jobs:
   generate-matrix:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     outputs:
       matrix: ${{ steps.gen.outputs.matrix }}
     steps:
@@ -30,15 +33,41 @@ jobs:
           $all = gh run list --branch ${{ github.ref_name }} --json databaseId,conclusion,createdAt,updatedAt,startedAt,workflowName --limit 100 | ConvertFrom-Json
           Write-Host "Total runs: $($all.Count)"
           $api = "https://api.github.com/repos/${{ github.repository }}/actions/runs"
-          $deleted = New-Object 'System.Collections.Generic.HashSet[long]'
-          # Delete failed/cancelled/timed_out — separate pass by age: old first
-          $all | Where-Object { $_.conclusion -in @('failure','cancelled','timed_out') } | Sort-Object createdAt | ForEach-Object { Write-Host "Delete: $($_.databaseId)"; try { Invoke-RestMethod -Method Delete -Uri "$api/$($_.databaseId)" -Headers @{Authorization = "token $env:GH_TOKEN"} -ErrorAction Stop; [void]$deleted.Add($_.databaseId); Write-Host "  OK" } catch { Write-Host "  FAIL: $($_.Exception.Message)" } }
+          $deleted = [System.Collections.Generic.HashSet[long]]::new()
+          # Delete failed/cancelled/timed_out — oldest first
+          $all | Where-Object { $_.conclusion -in @('failure','cancelled','timed_out') } | Sort-Object createdAt | ForEach-Object {
+            Write-Host "Delete failed: $($_.databaseId)"
+            try {
+              Invoke-RestMethod -Method Delete -Uri "$api/$($_.databaseId)" -Headers @{Authorization = "token $env:GH_TOKEN"} -ErrorAction Stop
+              [void]$deleted.Add($_.databaseId)
+              Write-Host "  OK"
+            } catch {
+              Write-Host "  FAIL: $($_.Exception.Message)"
+            }
+          }
           # Delete short-duration runs (< 3 min)
-          $all | Where-Object { $_.updatedAt -and $_.startedAt -and ([DateTime]::Parse($_.updatedAt) - [DateTime]::Parse($_.startedAt)).TotalMinutes -lt 3 } | ForEach-Object { Write-Host "Delete short: $($_.databaseId)"; try { Invoke-RestMethod -Method Delete -Uri "$api/$($_.databaseId)" -Headers @{Authorization = "token $env:GH_TOKEN"} -ErrorAction Stop; [void]$deleted.Add($_.databaseId); Write-Host "  OK" } catch { Write-Host "  FAIL: $($_.Exception.Message)" } }
+          $all | Where-Object { $_.updatedAt -and $_.startedAt -and ([DateTime]::Parse($_.updatedAt) - [DateTime]::Parse($_.startedAt)).TotalMinutes -lt 3 } | ForEach-Object {
+            Write-Host "Delete short: $($_.databaseId)"
+            try {
+              Invoke-RestMethod -Method Delete -Uri "$api/$($_.databaseId)" -Headers @{Authorization = "token $env:GH_TOKEN"} -ErrorAction Stop
+              [void]$deleted.Add($_.databaseId)
+              Write-Host "  OK"
+            } catch {
+              Write-Host "  FAIL: $($_.Exception.Message)"
+            }
+          }
           # Keep 10 newest from remaining
           $good = $all | Where-Object { $_.conclusion -notin @('failure','cancelled','timed_out') -and -not $deleted.Contains($_.databaseId) }
           Write-Host "Good runs after cleanup (keep 10 of $($good.Count))"
-          $good | Select-Object -Skip 10 | ForEach-Object { Write-Host "Delete old: $($_.databaseId)"; try { Invoke-RestMethod -Method Delete -Uri "$api/$($_.databaseId)" -Headers @{Authorization = "token $env:GH_TOKEN"} -ErrorAction Stop; Write-Host "  OK" } catch { Write-Host "  FAIL: $($_.Exception.Message)" } }
+          $good | Select-Object -Skip 10 | ForEach-Object {
+            Write-Host "Delete old: $($_.databaseId)"
+            try {
+              Invoke-RestMethod -Method Delete -Uri "$api/$($_.databaseId)" -Headers @{Authorization = "token $env:GH_TOKEN"} -ErrorAction Stop
+              Write-Host "  OK"
+            } catch {
+              Write-Host "  FAIL: $($_.Exception.Message)"
+            }
+          }
           exit 0
 
       # Generate dynamic matrix from config
@@ -46,6 +75,23 @@ jobs:
         shell: pwsh
         run: |
           $cfg = Get-Content .github/version-config.json | ConvertFrom-Json -AsHashtable
+          # Validate config
+          $errors = @()
+          foreach ($loc in $cfg.locales) {
+            if (-not $cfg.releases[$loc]) { $errors += "$loc not found in releases"; continue }
+            foreach ($build in $cfg.versions.Keys) {
+              $rel = $cfg.releases[$loc][$build]
+              if (-not $rel) { continue }
+              if ($rel.expected_hash -notmatch '^[a-f0-9]{64}$') {
+                $errors += "$loc/$build: expected_hash is not a 64-char hex string"
+              }
+            }
+          }
+          if ($errors.Count -gt 0) {
+            Write-Host "Config validation errors:"
+            $errors | ForEach-Object { Write-Host "  $_" }
+            throw "version-config.json validation failed"
+          }
           $matrix = @()
           foreach ($build in $cfg.versions.Keys) {
             $ver = $cfg.versions[$build]
@@ -95,20 +141,12 @@ jobs:
         run: |
           function Invoke-RestMethodWithRetry([string]$uri, [int]$maxAttempts=5, [int]$delaySeconds=120) {
             for ($i = 1; $i -le $maxAttempts; $i++) {
-              try {
-                return Invoke-RestMethod $uri
-              } catch {
+              try { return Invoke-RestMethod $uri } catch {
                 Write-Host "Invoke-RestMethod failed (attempt $i/$maxAttempts): $($_.Exception.Message)"
-                if ($i -lt $maxAttempts) {
-                  Write-Host "Retrying in $delaySeconds seconds..."
-                  Start-Sleep -Seconds $delaySeconds
-                } else {
-                  throw
-                }
+                if ($i -lt $maxAttempts) { Write-Host "Retrying in $delaySeconds seconds..."; Start-Sleep -Seconds $delaySeconds } else { throw }
               }
             }
           }
-
           $meta4 = Invoke-RestMethodWithRetry "https://api.github.com/repos/adavak/Win_ISO_Patching_Scripts/contents/Scripts/${{ matrix.version.meta4_file }}"
           $xmlText = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($meta4.content))
           $names = [regex]::Matches($xmlText, 'file name="([^"]+)"') | ForEach-Object { $_.Groups[1].Value }
@@ -126,10 +164,19 @@ jobs:
           $repo   = "${{ github.repository }}"
           $prefix = "${{ matrix.version.release_tag }}"
 
-          $api = "https://api.github.com/repos/$repo/releases?per_page=50"
+          $api = "https://api.github.com/repos/$repo/releases?per_page=100"
+
+          function Invoke-RestMethodWithRetry([string]$uri, [int]$maxAttempts=5, [int]$delaySeconds=120) {
+            for ($i = 1; $i -le $maxAttempts; $i++) {
+              try { return Invoke-RestMethod $uri } catch {
+                Write-Host "Invoke-RestMethod failed (attempt $i/$maxAttempts): $($_.Exception.Message)"
+                if ($i -lt $maxAttempts) { Write-Host "Retrying in $delaySeconds seconds..."; Start-Sleep -Seconds $delaySeconds } else { throw }
+              }
+            }
+          }
 
           try {
-            $releases = Invoke-RestMethod $api
+            $releases = Invoke-RestMethodWithRetry $api
 
             $matched = $releases |
               Where-Object { $_.tag_name -like "$prefix*" } |
@@ -149,7 +196,7 @@ jobs:
         id: check
         shell: pwsh
         run: |
-          if ("${{ steps.script.outputs.hash }}" -eq "${{ steps.last.outputs.hash }}") {
+          if ("${{ steps.script.outputs.hash }}" -and "${{ steps.script.outputs.hash }}" -eq "${{ steps.last.outputs.hash }}") {
             "run=false" >> $env:GITHUB_OUTPUT
           } else {
             "run=true" >> $env:GITHUB_OUTPUT
@@ -198,26 +245,24 @@ jobs:
           $ProgressPreference = 'SilentlyContinue'
           function Invoke-RestMethodWithRetry([string]$uri, [int]$maxAttempts=5, [int]$delaySeconds=120) {
             for ($i = 1; $i -le $maxAttempts; $i++) {
-              try {
-                return Invoke-RestMethod $uri
-              } catch {
+              try { return Invoke-RestMethod $uri } catch {
                 Write-Host "Invoke-RestMethod failed (attempt $i/$maxAttempts): $($_.Exception.Message)"
-                if ($i -lt $maxAttempts) {
-                  Write-Host "Retrying in $delaySeconds seconds..."
-                  Start-Sleep -Seconds $delaySeconds
-                } else {
-                  throw
-                }
+                if ($i -lt $maxAttempts) { Write-Host "Retrying in $delaySeconds seconds..."; Start-Sleep -Seconds $delaySeconds } else { throw }
               }
             }
           }
-
           $api = "https://api.github.com/repos/adavak/win_iso_zip/releases/tags/${{ matrix.version.release_tag }}"
           $json = Invoke-RestMethodWithRetry $api
           $parts = $json.assets | Where-Object { $_.name -match '\.zip\.\d+$' } | Sort-Object name
           if ($parts.Count -eq 0) { throw "No zip parts found for ${{ matrix.version.release_tag }}" }
           foreach ($p in $parts) {
-            Invoke-WebRequest $p.browser_download_url -OutFile "download\$($p.name)"
+            $out = "download\$($p.name)"
+            for ($i = 1; $i -le 3; $i++) {
+              try { Invoke-WebRequest $p.browser_download_url -OutFile $out; break } catch {
+                Write-Host "Download failed (attempt $i/3): $($_.Exception.Message)"
+                if ($i -eq 3) { throw } else { Start-Sleep 30 }
+              }
+            }
           }
 
       # 7. Merge & extract using 7z
@@ -297,18 +342,15 @@ jobs:
         if: steps.check.outputs.run == 'true'
         shell: pwsh
         run: |
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
           $tag = "${{ steps.iso.outputs.tag }}"
-          if (-not (git tag -l $tag)) {
-            git tag $tag
-            git push origin $tag
-          }
+          $sha = "${{ github.sha }}"
+          gh api repos/${{ github.repository }}/git/refs -f ref="refs/tags/$tag" -f sha=$sha
+          Write-Host "Tag $tag created via API"
 
       # 12. Create GitHub Release
       - name: Create Release
         if: steps.check.outputs.run == 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.iso.outputs.tag }}
           name: ${{ steps.iso.outputs.tag }}
