@@ -342,15 +342,18 @@ jobs:
         if: steps.check.outputs.run == 'true'
         shell: pwsh
         run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
           $tag = "${{ steps.iso.outputs.tag }}"
-          $sha = "${{ github.sha }}"
-          gh api repos/${{ github.repository }}/git/refs -f ref="refs/tags/$tag" -f sha=$sha
-          Write-Host "Tag $tag created via API"
+          if (-not (git tag -l $tag)) {
+            git tag $tag
+            git push origin $tag
+          }
 
       # 12. Create GitHub Release
       - name: Create Release
         if: steps.check.outputs.run == 'true'
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.iso.outputs.tag }}
           name: ${{ steps.iso.outputs.tag }}
