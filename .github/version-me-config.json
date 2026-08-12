@@ -1,0 +1,43 @@
+{
+    "versions":  {
+                     "14393":  {
+                                   "name":  "Win10 LTSB 2016",
+                                   "iso_label":  "LTSB_2016"
+                               },
+                     "17763":  {
+                                   "name":  "Win10 LTSC 2019",
+                                   "iso_label":  "LTSC_2019"
+                               },
+                     "19041":  {
+                                   "name":  "Win10 LTSC 2021",
+                                   "iso_label":  "LTSC_2021"
+                               },
+                     "26100":  {
+                                   "name":  "Win11 LTSC 2024",
+                                   "iso_label":  "LTSC_2024"
+                               }
+                 },
+    "locales":  [
+                    "zh-CN"
+                ],
+    "releases":  {
+                     "zh-CN":  {
+                                   "26100":  {
+                                                 "release_tag":  "LTSC2024",
+                                                 "expected_hash":  "4a3f22cc44d005183537f5f0be0b086a2334e6466c4c1442ca627121973d3f0d"
+                                             },
+                                   "19041":  {
+                                                 "release_tag":  "LTSC2021",
+                                                 "expected_hash":  "591033f7b1848740702764f6b454f42e34196e8aa8942dc2ffea3cbae8f9b101"
+                                             },
+                                   "17763":  {
+                                                 "release_tag":  "LTSC2019",
+                                                 "expected_hash":  "0c239a0d245cb2cd65aa2dc3f63ccae44fec608708a73668a0f76193deb0be82"
+                                             },
+                                   "14393":  {
+                                                 "release_tag":  "LTSB2016",
+                                                 "expected_hash":  "aa52f4897edc260a2127443419d67261119275da830d19a6c2452dbb5e225757"
+                                             }
+                               }
+                 }
+}
