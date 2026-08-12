@@ -251,7 +251,7 @@ jobs:
               }
             }
           }
-          $api = "https://api.github.com/repos/adavak/win_iso_zip/releases/tags/${{ matrix.version.release_tag }}"
+          $api = "https://api.github.com/repos/9dark9/UpdateWinISO/releases/tags/${{ matrix.version.release_tag }}"
           $json = Invoke-RestMethodWithRetry $api
           $parts = $json.assets | Where-Object { $_.name -match '\.7z\.\d+$' } | Sort-Object name
           if ($parts.Count -eq 0) { throw "No zip parts found for ${{ matrix.version.release_tag }}" }
