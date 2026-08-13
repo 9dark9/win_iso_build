@@ -1,0 +1,375 @@
+﻿name: Auto Patch 2
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: auto_patch
+  cancel-in-progress: false
+
+env:
+  SPLIT_SIZE: 2000m
+  SEVENZIP: "C:\\Program Files\\7-Zip\\7z.exe"
+
+jobs:
+  generate-matrix:
+    runs-on: windows-latest
+    outputs:
+      matrix: ${{ steps.gen.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Cleanup old runs before starting (once per dispatch)
+      - name: Cleanup old runs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $all = gh run list --branch ${{ github.ref_name }} --json databaseId,conclusion,createdAt,updatedAt,startedAt,workflowName --limit 100 | ConvertFrom-Json
+          Write-Host "Total runs: $($all.Count)"
+          $api = "https://api.github.com/repos/${{ github.repository }}/actions/runs"
+          $deleted = [System.Collections.Generic.HashSet[long]]::new()
+          # Delete failed/cancelled/timed_out — oldest first
+          $all | Where-Object { $_.conclusion -in @('failure','cancelled','timed_out') } | Sort-Object createdAt | ForEach-Object {
+            Write-Host "Delete failed: $($_.databaseId)"
+            try {
+              Invoke-RestMethod -Method Delete -Uri "$api/$($_.databaseId)" -Headers @{Authorization = "token $env:GH_TOKEN"} -ErrorAction Stop
+              [void]$deleted.Add($_.databaseId)
+              Write-Host "  OK"
+            } catch {
+              Write-Host "  FAIL: $($_.Exception.Message)"
+            }
+          }
+          # Delete short-duration runs (< 3 min)
+          $all | Where-Object { $_.updatedAt -and $_.startedAt -and ([DateTime]::Parse($_.updatedAt) - [DateTime]::Parse($_.startedAt)).TotalMinutes -lt 3 } | ForEach-Object {
+            Write-Host "Delete short: $($_.databaseId)"
+            try {
+              Invoke-RestMethod -Method Delete -Uri "$api/$($_.databaseId)" -Headers @{Authorization = "token $env:GH_TOKEN"} -ErrorAction Stop
+              [void]$deleted.Add($_.databaseId)
+              Write-Host "  OK"
+            } catch {
+              Write-Host "  FAIL: $($_.Exception.Message)"
+            }
+          }
+          # Keep 10 newest from remaining
+          $good = $all | Where-Object { $_.conclusion -notin @('failure','cancelled','timed_out') -and -not $deleted.Contains($_.databaseId) }
+          Write-Host "Good runs after cleanup (keep 10 of $($good.Count))"
+          $good | Select-Object -Skip 10 | ForEach-Object {
+            Write-Host "Delete old: $($_.databaseId)"
+            try {
+              Invoke-RestMethod -Method Delete -Uri "$api/$($_.databaseId)" -Headers @{Authorization = "token $env:GH_TOKEN"} -ErrorAction Stop
+              Write-Host "  OK"
+            } catch {
+              Write-Host "  FAIL: $($_.Exception.Message)"
+            }
+          }
+          exit 0
+
+      # Generate dynamic matrix from config
+      - id: gen
+        shell: pwsh
+        run: |
+          $cfg = Get-Content .github/version-old-config.json | ConvertFrom-Json -AsHashtable
+          # Validate config
+          $errors = @()
+          foreach ($loc in $cfg.locales) {
+            if (-not $cfg.releases[$loc]) { $errors += "$loc not found in releases"; continue }
+            foreach ($build in $cfg.versions.Keys) {
+              $rel = $cfg.releases[$loc][$build]
+              if (-not $rel) { continue }
+              if ($rel.expected_hash -notmatch '^[a-f0-9]{64}$') {
+                $errors += "${loc}/${build}: expected_hash is not a 64-char hex string"
+              }
+            }
+          }
+          if ($errors.Count -gt 0) {
+            Write-Host "Config validation errors:"
+            $errors | ForEach-Object { Write-Host "  $_" }
+            throw "version-old-config.json validation failed"
+          }
+          $matrix = @()
+          foreach ($build in $cfg.versions.Keys) {
+            $ver = $cfg.versions[$build]
+            foreach ($locale in $cfg.locales) {
+              $rel = $cfg.releases[$locale][$build]
+              if (-not $rel) {
+                Write-Host "Skip $($ver.name) ($locale) — no release data"
+                continue
+              }
+              if (-not $rel.expected_hash) {
+                Write-Host "Skip $($ver.name) ($locale) — expected_hash missing, fill it in version-old-config.json"
+                continue
+              }
+              $meta4Build = $build -replace '_iot$', ''
+              $matrix += [PSCustomObject]@{
+                name          = "$($ver.name) ($locale)"
+                release_tag   = $rel.release_tag
+                iso_label     = $ver.iso_label
+                expected_hash = $rel.expected_hash
+                meta4_file    = "script_${meta4Build}_x64.meta4"
+              }
+            }
+          }
+          $json = $matrix | ConvertTo-Json -Compress -Depth 3
+          Write-Host "Generated matrix: $json"
+          "matrix=$json" >> $env:GITHUB_OUTPUT
+
+  build:
+    needs: generate-matrix
+    strategy:
+      matrix:
+        version: ${{ fromJSON(needs.generate-matrix.outputs.matrix) }}
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # 1. Start marker
+      - name: Start workflow
+        shell: pwsh
+        run: Write-Host "Starting ${{ matrix.version.name }} Auto Patch workflow"
+
+      # 2. Get latest meta4 file hash (order-independent) from Win_ISO_Patching_Scripts
+      - name: Get patch script meta4 file hash
+        id: script
+        shell: pwsh
+        run: |
+          function Invoke-RestMethodWithRetry([string]$uri, [int]$maxAttempts=5, [int]$delaySeconds=120) {
+            for ($i = 1; $i -le $maxAttempts; $i++) {
+              try { return Invoke-RestMethod $uri } catch {
+                Write-Host "Invoke-RestMethod failed (attempt $i/$maxAttempts): $($_.Exception.Message)"
+                if ($i -lt $maxAttempts) { Write-Host "Retrying in $delaySeconds seconds..."; Start-Sleep -Seconds $delaySeconds } else { throw }
+              }
+            }
+          }
+          $meta4 = Invoke-RestMethodWithRetry "https://api.github.com/repos/adavak/Win_ISO_Patching_Scripts/contents/Scripts/${{ matrix.version.meta4_file }}"
+          $xmlText = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($meta4.content))
+          $names = [regex]::Matches($xmlText, 'file name="([^"]+)"') | ForEach-Object { $_.Groups[1].Value }
+          $sorted = $names | Sort-Object { [int]($_ -replace '^.*kb(\d+).*$', '$1') }
+          $combined = $sorted -join '|'
+          $hashBytes = [System.Security.Cryptography.SHA256]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($combined))
+          $hash = [System.BitConverter]::ToString($hashBytes).Replace('-', '').ToLower()
+          "hash=$hash" >> $env:GITHUB_OUTPUT
+
+      # 3. Read last meta4 hash from Release body
+      - name: Read last meta4 hash
+        id: last
+        shell: pwsh
+        run: |
+          $repo   = "${{ github.repository }}"
+          $prefix = "${{ matrix.version.release_tag }}"
+
+          $api = "https://api.github.com/repos/$repo/releases?per_page=100"
+
+          function Invoke-RestMethodWithRetry([string]$uri, [int]$maxAttempts=5, [int]$delaySeconds=120) {
+            for ($i = 1; $i -le $maxAttempts; $i++) {
+              try { return Invoke-RestMethod $uri } catch {
+                Write-Host "Invoke-RestMethod failed (attempt $i/$maxAttempts): $($_.Exception.Message)"
+                if ($i -lt $maxAttempts) { Write-Host "Retrying in $delaySeconds seconds..."; Start-Sleep -Seconds $delaySeconds } else { throw }
+              }
+            }
+          }
+
+          try {
+            $releases = Invoke-RestMethodWithRetry $api
+
+            $matched = $releases |
+              Where-Object { $_.tag_name -like "$prefix*" } |
+              Sort-Object published_at -Descending |
+              Select-Object -First 1
+
+            if ($matched -and $matched.body -match 'META4_HASH=([a-f0-9]{64})') {
+              "hash=$($matches[1])" >> $env:GITHUB_OUTPUT
+            } else {
+              "hash=" >> $env:GITHUB_OUTPUT
+            }
+          } catch {
+            "hash=" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Check if workflow should run
+        id: check
+        shell: pwsh
+        run: |
+          if ("${{ steps.script.outputs.hash }}" -and "${{ steps.script.outputs.hash }}" -eq "${{ steps.last.outputs.hash }}") {
+            "run=false" >> $env:GITHUB_OUTPUT
+          } else {
+            "run=true" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Skip if no update
+        if: steps.check.outputs.run == 'false'
+        run: echo "No meta4 update for ${{ matrix.version.name }}, skip build."
+
+      # 4. Prepare workspace
+      - name: Prepare workspace
+        if: steps.check.outputs.run == 'true'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path download, patcher, release
+
+      # 5. Clone patch scripts (with retry to avoid hangs)
+      - name: Clone patch scripts
+        if: steps.check.outputs.run == 'true'
+        shell: pwsh
+        run: |
+          $maxAttempts = 5
+          $delaySeconds = 120
+          $repoUrl = 'https://github.com/adavak/Win_ISO_Patching_Scripts.git'
+          for ($i = 1; $i -le $maxAttempts; $i++) {
+            Write-Host "Cloning patch scripts (attempt $i/$maxAttempts)..."
+            & git clone $repoUrl patcher
+            if ($LASTEXITCODE -eq 0) {
+              Write-Host "Clone succeeded"
+              break
+            }
+            Write-Host "git clone failed with exit code $LASTEXITCODE"
+            if ($i -lt $maxAttempts) {
+              Write-Host "Retrying in $delaySeconds seconds..."
+              Start-Sleep -Seconds $delaySeconds
+            } else {
+              throw "git clone failed after $maxAttempts attempts"
+            }
+          }
+
+      # 6. Download split ISO zip parts
+      - name: Download ISO zip parts
+        if: steps.check.outputs.run == 'true'
+        shell: pwsh
+        run: |
+          $ProgressPreference = 'SilentlyContinue'
+          function Invoke-RestMethodWithRetry([string]$uri, [int]$maxAttempts=5, [int]$delaySeconds=120) {
+            for ($i = 1; $i -le $maxAttempts; $i++) {
+              try { return Invoke-RestMethod $uri } catch {
+                Write-Host "Invoke-RestMethod failed (attempt $i/$maxAttempts): $($_.Exception.Message)"
+                if ($i -lt $maxAttempts) { Write-Host "Retrying in $delaySeconds seconds..."; Start-Sleep -Seconds $delaySeconds } else { throw }
+              }
+            }
+          }
+          $api = "https://api.github.com/repos/9dark9/UpdateWinISO/releases/tags/${{ matrix.version.release_tag }}"
+          $json = Invoke-RestMethodWithRetry $api
+          $parts = $json.assets | Where-Object { $_.name -match '\.7z\.\d+$' } | Sort-Object name
+          if ($parts.Count -eq 0) { throw "No zip parts found for ${{ matrix.version.release_tag }}" }
+          foreach ($p in $parts) {
+            $out = "download\$($p.name)"
+            for ($i = 1; $i -le 3; $i++) {
+              try { Invoke-WebRequest $p.browser_download_url -OutFile $out; break } catch {
+                Write-Host "Download failed (attempt $i/3): $($_.Exception.Message)"
+                if ($i -eq 3) { throw } else { Start-Sleep 30 }
+              }
+            }
+          }
+
+      # 7. Merge & extract using 7z
+      - name: Extract ISO using 7z
+        if: steps.check.outputs.run == 'true'
+        shell: pwsh
+        run: |
+          $sevenZip = "${{ env.SEVENZIP }}"
+          if (-not (Test-Path $sevenZip)) { throw "7z.exe not found at $sevenZip" }
+          & $sevenZip x "download\*.7z.001" -o"patcher" -y
+
+      # 8. Verify original ISO SHA256
+      - name: Verify ISO SHA256
+        if: steps.check.outputs.run == 'true'
+        shell: pwsh
+        run: |
+          $sevenZip = "${{ env.SEVENZIP }}"
+          $iso = Get-ChildItem patcher -Filter *.iso -Recurse | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $iso) { throw "Original ISO not found" }
+
+          $hashOutput = & $sevenZip h -scrcSHA256 "$($iso.FullName)"
+          $hashMatches = $hashOutput | Select-String -Pattern '([a-fA-F0-9]{64})' | ForEach-Object { $_.Matches[0].Value }
+          $actual = ($hashMatches | Select-Object -First 1).Trim().ToLower()
+          if ($actual -ne "${{ matrix.version.expected_hash }}") { throw "SHA256 mismatch: $actual" }
+          
+      # 9. 替换自定义 W10UI.ini
+      - name: Copy W10UI.ini to patcher directory
+        if: steps.check.outputs.run == 'true'
+        shell: cmd
+        run: |
+          copy "${{ github.workspace }}\myini\W10UI.ini" "${{ github.workspace }}\patcher"
+
+      # 10. Run Start.cmd (auto exit via choice 9)
+      - name: Run Start.cmd
+        if: steps.check.outputs.run == 'true'
+        shell: cmd
+        run: |
+          cd patcher
+          (
+            echo 9
+            echo 9
+            echo 9
+          ) | Start.cmd
+
+      # 11. Rename ISO and split using 7z
+      - name: Rename ISO and split
+        id: iso
+        if: steps.check.outputs.run == 'true'
+        shell: pwsh
+        run: |
+          $sevenZip = "${{ env.SEVENZIP }}"
+          $iso = Get-ChildItem patcher -Filter *.iso -Recurse | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+
+          # Version/build and locale
+          if ($iso.Name -match '(\d{1,6}\.\d{1,6})') { $versionBuild = $matches[1]; $version,$build=$versionBuild -split '\.' }
+          if ($iso.Name -match '([A-Za-z]+-[A-Za-z]+)') { $locale = $matches[1].ToLower() }
+
+          $date = Get-Date -Format "yyMMdd"
+          $time = "0800"
+
+          # 7z SHA256
+          $hashOutput = & $sevenZip h -scrcSHA256 "$($iso.FullName)"
+          $hashMatches = $hashOutput | Select-String -Pattern '([a-fA-F0-9]{64})' | ForEach-Object { $_.Matches[0].Value }
+          $hash = ($hashMatches | Select-Object -First 1).Trim().ToLower()
+          if (-not $hash -or $hash.Length -lt 8) { throw "Failed to parse valid SHA256 from 7z output" }
+          $hash8 = $hash.Substring($hash.Length-8,8)
+
+          $newName = "${{ matrix.version.iso_label }}.$version.$build.$date-$time_${locale}_$hash8.iso"
+          Rename-Item -Path $iso.FullName -NewName $newName
+
+          # Split using 7z
+          & $sevenZip a "release\$newName.7z" "patcher\$newName" -v${{ env.SPLIT_SIZE }}
+
+          $runTimeTag = (Get-Date).ToString("yyyyMMdd-HHmm")
+          $tag = "${{ matrix.version.release_tag }}-$version.$build-$runTimeTag"
+          $isoFile = "patcher\$newName"
+
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "iso_file=$isoFile" >> $env:GITHUB_OUTPUT
+          "iso_sha256=$hash" >> $env:GITHUB_OUTPUT
+
+      # 12. Create Git tag
+      - name: Create Git tag
+        if: steps.check.outputs.run == 'true'
+        shell: pwsh
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          $tag = "${{ steps.iso.outputs.tag }}"
+          if (-not (git tag -l $tag)) {
+            git tag $tag
+            git push origin $tag
+          }
+
+      # 13. Create GitHub Release
+      - name: Create Release
+        if: steps.check.outputs.run == 'true'
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.iso.outputs.tag }}
+          name: "${{ steps.iso.outputs.tag }}.${{ github.event.repository.updated_at }}"
+          body: |
+            ISO SHA256: ${{ steps.iso.outputs.iso_sha256 }}
+
+            <!-- STATE
+            META4_HASH=${{ steps.script.outputs.hash }}
+            -->
+          files: release/*.7z.*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
