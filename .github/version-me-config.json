@@ -1,12 +1,12 @@
 {
     "versions":  {
                      "14393":  {
-                                   "name":  "Win10 LTSB 2016",
-                                   "iso_label":  "LTSB_2016"
+                                   "name":  "Win10 LTSB 2016.14393",
+                                   "iso_label":  "LTSB2016.14393"
                                },
                      "17763":  {
-                                   "name":  "Win10 LTSC 2019",
-                                   "iso_label":  "LTSC_2019"
+                                   "name":  "Win10 LTSC 2019.17763",
+                                   "iso_label":  "LTSC2019.17763"
                                },
                      "19041":  {
                                    "name":  "Win10 LTSC2021.19044",
@@ -17,8 +17,12 @@
                                    "iso_label":  "LTSC2021.19045"
                                },
                      "26100":  {
-                                   "name":  "Win11 LTSC 2024",
-                                   "iso_label":  "LTSC_2024"
+                                   "name":  "Win11 LTSC 2024.26100",
+                                   "iso_label":  "LTSC2024.26100"
+                               },
+                     "26100":  {
+                                   "name":  "Win11 LTSC 2024.26300",
+                                   "iso_label":  "LTSC2024.26300"
                                }
                  },
     "locales":  [
@@ -27,8 +31,12 @@
     "releases":  {
                      "zh-CN":  {
                                    "26100":  {
-                                                 "release_tag":  "LTSC2024",
-                                                 "expected_hash":  "4a3f22cc44d005183537f5f0be0b086a2334e6466c4c1442ca627121973d3f0d"
+                                                 "release_tag":  "LTSC2024.26300",
+                                                 "expected_hash":  "EE620D4055216F9E63217F794FD6CFAB1E1880A2E8F7A94469762814371C1C1C"
+                                             },
+                                   "26100":  {
+                                                 "release_tag":  "LTSC2024.26100",
+                                                 "expected_hash":  "52DEA355E3F4B35DD4FB32AD6E9669119F332237C2F064AEDA92F988482F34CA"
                                              },
                                    "19041":  {
                                                  "release_tag":  "LTSC2021.19044",
@@ -39,12 +47,12 @@
                                                  "expected_hash":  "55D97AAF12B703945C6381E55CFD0D29AAE3344FBB3AC405C712E112CFC6B689"
                                              },
                                    "17763":  {
-                                                 "release_tag":  "LTSC2019",
-                                                 "expected_hash":  "0c239a0d245cb2cd65aa2dc3f63ccae44fec608708a73668a0f76193deb0be82"
+                                                 "release_tag":  "LTSC2019.17763",
+                                                 "expected_hash":  "0C239A0D245CB2CD65AA2DC3F63CCAE44FEC608708A73668A0F76193DEB0BE82"
                                              },
                                    "14393":  {
-                                                 "release_tag":  "LTSB2016",
-                                                 "expected_hash":  "aa52f4897edc260a2127443419d67261119275da830d19a6c2452dbb5e225757"
+                                                 "release_tag":  "LTSB2016.14393",
+                                                 "expected_hash":  "AA52F4897EDC260A2127443419D67261119275DA830D19A6C2452DBB5E225757"
                                              }
                                }
                  }
