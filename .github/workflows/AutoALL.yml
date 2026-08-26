@@ -1,4 +1,4 @@
-﻿name: Auto Patch 3
+﻿name: Auto Patch ALL
 
 on:
   workflow_dispatch:
