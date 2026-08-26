@@ -1,0 +1,27 @@
+{
+    "versions":  {
+        "19041":  {
+            "name":  "Win10 LTSC2021",
+            "iso_label":  "LTSC2021"
+        },
+        "26100":  {
+            "name":  "Win11 LTSC 2024",
+            "iso_label":  "LTSC2024"
+        }
+    },
+    "locales": [
+        "zh-CN"
+    ],
+    "releases":  {
+        "zh-CN": {
+            "26100":  {
+                "release_tag":  "LTSC2024",
+                "expected_hash":  "CBA9EB9E6A1B2B02CF904AA11AAF3E68CC8CF31A544CD04794DD19065FB94EDE"
+                      },
+            "19041":  {
+                "release_tag":  "LTSC2021",
+                "expected_hash":  "D4FF1F17E018D2AA77F3E707864F0CBEDD765D8E999CAC7EEF354EE6A3F33FE4"
+                      },
+        }
+    }
+}
