@@ -45,7 +45,7 @@ jobs:
               Write-Host "  FAIL: $($_.Exception.Message)"
             }
           }
-          # Delete short-duration runs (< 3 min)
+          # Delete short-duration runs (= 3 min)
           $all | Where-Object { $_.updatedAt -and $_.startedAt -and ([DateTime]::Parse($_.updatedAt) - [DateTime]::Parse($_.startedAt)).TotalMinutes -lt 3 } | ForEach-Object {
             Write-Host "Delete short: $($_.databaseId)"
             try {
