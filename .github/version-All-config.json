@@ -16,7 +16,7 @@
         "zh-CN": {
             "26100":  {
                 "release_tag":  "LTSC2024",
-                "expected_hash":  "CBA9EB9E6A1B2B02CF904AA11AAF3E68CC8CF31A544CD04794DD19065FB94EDE"
+                "expected_hash":  "51F68AB9C728B4DC49DEBFA57CD372932754528BC457CE89A31469634F555893"
                       },
             "19041":  {
                 "release_tag":  "LTSC2021",
