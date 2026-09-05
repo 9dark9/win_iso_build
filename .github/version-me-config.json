@@ -24,11 +24,11 @@
         "zh-CN": {
             "26100":  {
                 "release_tag":  "LTSC2024",
-                "expected_hash":  "52DEA355E3F4B35DD4FB32AD6E9669119F332237C2F064AEDA92F988482F34CA"
+                "expected_hash":  "C9795FE0A42DDC0E4580A0A2BD59577C4AB1CA94EA80C12200E5171DC0A90112"
                       },
             "19041":  {
                 "release_tag":  "LTSC2021",
-                "expected_hash":  "D4FF1F17E018D2AA77F3E707864F0CBEDD765D8E999CAC7EEF354EE6A3F33FE4"
+                "expected_hash":  "851D755E1C2B897A85CBE049107020965A8A4FEFB7350292583F9651B7DF48AC"
                       },
             "17763":  {
                 "release_tag":  "LTSC2019",
