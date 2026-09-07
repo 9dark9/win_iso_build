@@ -9,7 +9,7 @@
             "iso_label":  "LTSC2019"
         },
         "19041":  {
-            "name":  "Win10 LTSC2021",
+            "name":  "Win10 LTSC 2021",
             "iso_label":  "LTSC2021"
         },
         "26100":  {
@@ -24,11 +24,11 @@
         "zh-CN": {
             "26100":  {
                 "release_tag":  "LTSC2024",
-                "expected_hash":  "C9795FE0A42DDC0E4580A0A2BD59577C4AB1CA94EA80C12200E5171DC0A90112"
+                "expected_hash":  "0C1269C7AD2D6E503BD9900795DE9AD202264DCDE64F18F25815BF7780881BF1"
                       },
             "19041":  {
                 "release_tag":  "LTSC2021",
-                "expected_hash":  "851D755E1C2B897A85CBE049107020965A8A4FEFB7350292583F9651B7DF48AC"
+                "expected_hash":  "3C85BB84FCB8B100D423F4AB2A1B8F82E50CA1495FC8D42A023AF91EA5EED2A1"
                       },
             "17763":  {
                 "release_tag":  "LTSC2019",
