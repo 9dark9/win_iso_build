@@ -1,4 +1,4 @@
-﻿name: Auto Patch
+name: Auto Patch
 
 on:
   workflow_dispatch:
@@ -122,6 +122,7 @@ jobs:
   build:
     needs: generate-matrix
     strategy:
+      fail-fast: false
       matrix:
         version: ${{ fromJSON(needs.generate-matrix.outputs.matrix) }}
     runs-on: windows-latest
@@ -295,17 +296,41 @@ jobs:
         run: |
           copy "${{ github.workspace }}\myini\W10UI.ini" "${{ github.workspace }}\patcher"
 
-      # 10. Run Start.cmd (auto exit via choice 9)
+      # 10. Run Start.cmd (auto exit via choice 9), retry on download failure
       - name: Run Start.cmd
         if: steps.check.outputs.run == 'true'
-        shell: cmd
+        shell: pwsh
         run: |
-          cd patcher
-          (
-            echo 9
-            echo 9
-            echo 9
-          ) | Start.cmd
+          $maxAttempts = 3
+          Set-Location patcher
+          for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+            Write-Host "=== Run Start.cmd (attempt $attempt/$maxAttempts) ==="
+            $output = (& cmd /c "(echo 9 & echo 9 & echo 9) | Start.cmd" 2>&1 | Out-String)
+            $code = $LASTEXITCODE
+            Write-Host $output
+            if ($code -eq 0) {
+              Write-Host "Start.cmd succeeded."
+              break
+            }
+            if ($output -notmatch 'encountered an error while downloading') {
+              throw "Start.cmd failed (exit code $code) outside the download phase; not retrying."
+            }
+            Write-Host "Download error detected (attempt $attempt/$maxAttempts)."
+            if ($attempt -eq $maxAttempts) {
+              throw "Start.cmd download failed after $maxAttempts attempts."
+            }
+            # aria2 -c would treat an existing file as complete and skip it, so
+            # checksum-failed files must be removed before the next attempt.
+            $patchDir = Join-Path (Get-Location) 'patch'
+            $badFiles = [regex]::Matches($output, 'Checksum error detected\. file=([^\r\n\s]+)') |
+              ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique
+            foreach ($bad in $badFiles) {
+              $target = Join-Path $patchDir (Split-Path $bad -Leaf)
+              Write-Host "Removing checksum-failed file: $target"
+              Remove-Item $target -Force -ErrorAction SilentlyContinue
+              Remove-Item ($target + '.aria2') -Force -ErrorAction SilentlyContinue
+            }
+          }
 
       # 11. Rename ISO and split using 7z
       - name: Rename ISO and split
