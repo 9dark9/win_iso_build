@@ -32,11 +32,11 @@
                       },
             "17763":  {
                 "release_tag":  "LTSC2019",
-                "expected_hash":  "0C239A0D245CB2CD65AA2DC3F63CCAE44FEC608708A73668A0F76193DEB0BE82"
+                "expected_hash":  "6FDD4E3A7007E62538C461394C73762AB2D9290EC7AD1678325FEFB2099E0C46"
                       },
             "14393":  {
                 "release_tag":  "LTSB2016",
-                "expected_hash":  "AA52F4897EDC260A2127443419D67261119275DA830D19A6C2452DBB5E225757"
+                "expected_hash":  "6175DA28D4344A23E8F7CFC26A1854A0C6DB37B38C37656484E8395B2BD86AE7"
             }
         }
     }
