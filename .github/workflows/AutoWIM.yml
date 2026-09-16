@@ -198,7 +198,7 @@ jobs:
         shell: pwsh
         run: |
           if ("${{ steps.script.outputs.hash }}" -and "${{ steps.script.outputs.hash }}" -eq "${{ steps.last.outputs.hash }}") {
-            "run=false" >> $env:GITHUB_OUTPUT
+            "run=true" >> $env:GITHUB_OUTPUT
           } else {
             "run=true" >> $env:GITHUB_OUTPUT
           }
