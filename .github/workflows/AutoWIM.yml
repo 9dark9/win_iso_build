@@ -139,10 +139,12 @@ jobs:
       - name: Get patch script meta4 file hash
         id: script
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           function Invoke-RestMethodWithRetry([string]$uri, [int]$maxAttempts=5, [int]$delaySeconds=120) {
             for ($i = 1; $i -le $maxAttempts; $i++) {
-              try { return Invoke-RestMethod $uri } catch {
+              try { return Invoke-RestMethod -Uri $uri -Headers @{ Authorization = "token $env:GH_TOKEN" } } catch {
                 Write-Host "Invoke-RestMethod failed (attempt $i/$maxAttempts): $($_.Exception.Message)"
                 if ($i -lt $maxAttempts) { Write-Host "Retrying in $delaySeconds seconds..."; Start-Sleep -Seconds $delaySeconds } else { throw }
               }
@@ -161,6 +163,8 @@ jobs:
       - name: Read last meta4 hash
         id: last
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $repo   = "${{ github.repository }}"
           $prefix = "${{ matrix.version.release_tag }}"
@@ -169,7 +173,7 @@ jobs:
 
           function Invoke-RestMethodWithRetry([string]$uri, [int]$maxAttempts=5, [int]$delaySeconds=120) {
             for ($i = 1; $i -le $maxAttempts; $i++) {
-              try { return Invoke-RestMethod $uri } catch {
+              try { return Invoke-RestMethod -Uri $uri -Headers @{ Authorization = "token $env:GH_TOKEN" } } catch {
                 Write-Host "Invoke-RestMethod failed (attempt $i/$maxAttempts): $($_.Exception.Message)"
                 if ($i -lt $maxAttempts) { Write-Host "Retrying in $delaySeconds seconds..."; Start-Sleep -Seconds $delaySeconds } else { throw }
               }
@@ -242,11 +246,13 @@ jobs:
       - name: Download ISO zip parts
         if: steps.check.outputs.run == 'true'
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $ProgressPreference = 'SilentlyContinue'
           function Invoke-RestMethodWithRetry([string]$uri, [int]$maxAttempts=5, [int]$delaySeconds=120) {
             for ($i = 1; $i -le $maxAttempts; $i++) {
-              try { return Invoke-RestMethod $uri } catch {
+              try { return Invoke-RestMethod -Uri $uri -Headers @{ Authorization = "token $env:GH_TOKEN" } } catch {
                 Write-Host "Invoke-RestMethod failed (attempt $i/$maxAttempts): $($_.Exception.Message)"
                 if ($i -lt $maxAttempts) { Write-Host "Retrying in $delaySeconds seconds..."; Start-Sleep -Seconds $delaySeconds } else { throw }
               }
