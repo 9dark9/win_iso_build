@@ -32,7 +32,7 @@
     "releases": {
         "en-US": {
             "26100_iot": {
-                "release_tag": "Windows_11_IOT_LTSC_2024_X64_EN-US",
+                "release_tag": "Windows_11_IoT_LTSC_2024_X64_EN-US",
                 "expected_hash": "4f59662a96fc1da48c1b415d6c369d08af55ddd64e8f1c84e0166d9e50405d7a"
             },
             "26100": {
@@ -40,7 +40,7 @@
                 "expected_hash": "157d8365a517c40afeb3106fdd74d0836e1025debbc343f2080e1a8687607f51"
             },
             "19041_iot": {
-                "release_tag": "Windows_10_IOT_LTSC_2021_X64_EN-US",
+                "release_tag": "Windows_10_IoT_LTSC_2021_X64_EN-US",
                 "expected_hash": "a0334f31ea7a3e6932b9ad7206608248f0bd40698bfb8fc65f14fc5e4976c160"
             },
             "19041": {
