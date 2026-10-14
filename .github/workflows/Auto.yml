@@ -367,7 +367,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.iso.outputs.tag }}
-          name: "esd.${{ steps.iso.outputs.tag }}.${{ github.event.repository.updated_at }}"
+          name: "${{ steps.iso.outputs.tag }}.${{ github.event.repository.updated_at }}"
           body: |
             ISO SHA256: ${{ steps.iso.outputs.iso_sha256 }}
 
