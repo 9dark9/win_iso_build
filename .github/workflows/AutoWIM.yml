@@ -337,8 +337,14 @@ jobs:
           $newName = "${{ matrix.version.iso_label }}.$version.$build.$date-$time_${locale}_$hash8.iso"
           Rename-Item -Path $iso.FullName -NewName $newName
 
-          # Split using 7z
-          & $sevenZip a "release\$newName.7z" "patcher\$newName" -v${{ env.SPLIT_SIZE }}
+          # Split using 7z from inside patcher, so the ISO sits at the archive root
+          Push-Location patcher
+          try {
+            & $sevenZip a "..\release\$newName.7z" "$newName" -v${{ env.SPLIT_SIZE }}
+            if ($LASTEXITCODE -ne 0) { throw "7z split failed with exit code $LASTEXITCODE" }
+          } finally {
+            Pop-Location
+          }
 
           $runTimeTag = (Get-Date).ToString("yyyyMMdd-HHmm")
           $tag = "${{ matrix.version.release_tag }}-$version.$build-$runTimeTag"
