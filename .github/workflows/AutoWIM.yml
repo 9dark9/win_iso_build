@@ -398,7 +398,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.iso.outputs.tag }}
-          name: "WIM.${{ steps.iso.outputs.tag }}.${{ version.$build.$date-$time }}"
+          name: "WIM.${{ steps.iso.outputs.tag }}.$version.$build.$date-$time"
           body: |
             ISO SHA256: ${{ steps.iso.outputs.iso_sha256 }}
 
