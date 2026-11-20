@@ -393,12 +393,20 @@ jobs:
           }
 
       # 12. Create GitHub Release
+      - name: Get build date
+        id: builddate
+        run: |
+          echo "YEAR=$(date +%Y)" >> $GITHUB_OUTPUT
+          echo "MONTH=$(date +%m)" >> $GITHUB_OUTPUT
+          echo "DAY=$(date +%d)" >> $GITHUB_OUTPUT
+        shell: bash
+
       - name: Create Release
         if: steps.check.outputs.run == 'true'
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.iso.outputs.tag }}
-          name: "2026年11月.${{ steps.iso.outputs.tag }}"
+          name: "${{ steps.builddate.outputs.YEAR }}年${{ steps.builddate.outputs.MONTH }}月${{ steps.builddate.outputs.DAY }}日.${{ steps.iso.outputs.tag }}"
           body: |
             ISO SHA256: ${{ steps.iso.outputs.iso_sha256 }}
 
