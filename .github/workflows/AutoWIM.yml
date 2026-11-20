@@ -398,6 +398,7 @@ jobs:
         run: |
           echo "YEAR=$(date +%Y)" >> $GITHUB_OUTPUT
           echo "MONTH=$(date +%m)" >> $GITHUB_OUTPUT
+          echo "DAY=$(date +%d)" >> $GITHUB_OUTPUT
         shell: bash
 
       - name: Create Release
@@ -405,7 +406,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.iso.outputs.tag }}
-          name: "${{ steps.builddate.outputs.YEAR }}年${{ steps.builddate.outputs.MONTH }}月.${{ steps.iso.outputs.tag }}.WIM"
+          name: "${{ steps.builddate.outputs.YEAR }}年${{ steps.builddate.outputs.MONTH }}月${{ steps.builddate.outputs.DAY }}日.${{ steps.iso.outputs.tag }}.WIM"
           body: |
             ISO SHA256: ${{ steps.iso.outputs.iso_sha256 }}
 
@@ -413,7 +414,5 @@ jobs:
             META4_HASH=${{ steps.script.outputs.hash }}
             -->
           files: release/*.7z.*
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
